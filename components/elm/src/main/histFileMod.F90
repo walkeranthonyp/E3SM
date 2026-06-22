@@ -1950,6 +1950,7 @@ contains
        call ncd_defdim(lnfid, 'fates_levcdam', nlevdamage_fates, dimid)
        call ncd_defdim(lnfid, 'fates_levscagpf', nlevsclass_fates * nlevage_fates * numpft_fates, dimid)
        call ncd_defdim(lnfid, 'fates_levagepft', nlevage_fates * numpft_fates, dimid)
+       call ncd_defdim(lnfid, 'fates_levcnagpf', nclmax_fates * nlevage_fates * numpft_fates, dimid)
        call ncd_defdim(lnfid, 'fates_levheight', nlevheight_fates, dimid)
        call ncd_defdim(lnfid, 'fates_levelem', nelements_fates, dimid)
        call ncd_defdim(lnfid, 'fates_levelpft', nelements_fates * numpft_fates, dimid)
@@ -2388,6 +2389,9 @@ contains
     use FatesInterfaceTypesMod, only : fates_hdim_pftmap_levscagpft
     use FatesInterfaceTypesMod, only : fates_hdim_agmap_levagepft
     use FatesInterfaceTypesMod, only : fates_hdim_pftmap_levagepft
+    use FatesInterfaceTypesMod, only : fates_hdim_agmap_levcanagepft
+    use FatesInterfaceTypesMod, only : fates_hdim_pftmap_levcanagepft
+    use FatesInterfaceTypesMod, only : fates_hdim_canmap_levcanagepft
     use FatesInterfaceTypesMod, only : fates_hdim_levelem
     use FatesInterfaceTypesMod, only : fates_hdim_elmap_levelpft
     use FatesInterfaceTypesMod, only : fates_hdim_pftmap_levelpft
@@ -2512,6 +2516,12 @@ contains
                   long_name='FATES pft map into patch age x pft', units='-', ncid=nfid(t))
              call ncd_defvar(varname='fates_agmap_levagepft', xtype=ncd_int, dim1name='fates_levagepft', &
                    long_name='FATES age-class map into patch age x pft', units='-', ncid=nfid(t))
+             call ncd_defvar(varname='fates_pftmap_levcanagepft', xtype=ncd_int, dim1name='fates_levcnagpf', &
+                  long_name='FATES pft map into canopy-level x patch age x pft', units='-', ncid=nfid(t))
+             call ncd_defvar(varname='fates_agmap_levcanagepft', xtype=ncd_int, dim1name='fates_levcnagpf', &
+                   long_name='FATES age-class map into canopy-level x patch age x pft', units='-', ncid=nfid(t))
+             call ncd_defvar(varname='fates_canmap_levcanagepft', xtype=ncd_int, dim1name='fates_levcnagpf', &
+                   long_name='FATES canopy-level map into canopy-level x patch age x pft', units='-', ncid=nfid(t))
              call ncd_defvar(varname='fates_levelem',xtype=ncd_int, dim1name='fates_levelem', &
                    long_name='FATES element (C,N,P,...) identifier', units='-', ncid=nfid(t))
              call ncd_defvar(varname='fates_elmap_levelpft', xtype=ncd_int, dim1name='fates_levelpft', &
@@ -2584,6 +2594,9 @@ contains
              call ncd_io(varname='fates_pftmap_levscagpft',data=fates_hdim_pftmap_levscagpft, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_pftmap_levagepft',data=fates_hdim_pftmap_levagepft, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_agmap_levagepft',data=fates_hdim_agmap_levagepft, ncid=nfid(t), flag='write')
+             call ncd_io(varname='fates_pftmap_levcanagepft',data=fates_hdim_pftmap_levcanagepft, ncid=nfid(t), flag='write')
+             call ncd_io(varname='fates_agmap_levcanagepft',data=fates_hdim_agmap_levcanagepft, ncid=nfid(t), flag='write')
+             call ncd_io(varname='fates_canmap_levcanagepft',data=fates_hdim_canmap_levcanagepft, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_levelem',data=fates_hdim_levelem, ncid=nfid(t),flag='write')
              call ncd_io(varname='fates_elmap_levelpft',data=fates_hdim_elmap_levelpft, ncid=nfid(t),flag='write')
              call ncd_io(varname='fates_pftmap_levelpft',data=fates_hdim_pftmap_levelpft, ncid=nfid(t),flag='write')
@@ -4889,6 +4902,8 @@ contains
        num2d = nlevsclass_fates*nlevage_fates*numpft_fates
     case ('fates_levagepft')
        num2d = nlevage_fates*numpft_fates
+    case ('fates_levcnagpf')
+       num2d = nclmax_fates*nlevage_fates*numpft_fates
     case default
        write(iulog,*) trim(subname),' ERROR: unsupported 2d type ',type2d, &
           ' currently supported types for multi level fields are: ', &
