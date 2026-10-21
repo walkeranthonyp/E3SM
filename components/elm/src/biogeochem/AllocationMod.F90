@@ -1108,8 +1108,8 @@ contains
    integer :: ci, s     ! used for FATES BC (clump index, site index)
 
    ! Fractional uptake profiles, that are proportional to root density
-   real(r8):: nuptake_prof(1:num_soilc,1:nlevdecomp)
-   real(r8):: puptake_prof(1:num_soilc,1:nlevdecomp)
+   real(r8) :: nuptake_prof(1:num_soilc,1:nlevdecomp)
+   real(r8) :: puptake_prof(1:num_soilc,1:nlevdecomp)
    real(r8) :: sum_nh4demand(1:nlevdecomp)  ! sum NH4 demand across cohorts
    real(r8) :: sum_no3demand(1:nlevdecomp)  ! sum NO3 demand across cohorts
    real(r8) :: sum_ndemand(1:nlevdecomp)  ! sum N demand across cohorts
@@ -1124,6 +1124,9 @@ contains
    real(r8) :: frac_no3_to_plant
    real(r8) :: frac_nh4_to_plant
    real(r8) :: frac_nh4_to_no3
+   real(r8) :: solution_nh4conc 
+   real(r8) :: solution_no3conc 
+   real(r8) :: solution_pconc 
    integer,  allocatable :: filter_pcomp(:)               ! this is a plant competitor map for FATES/ELM-BL w/ ECA
    real(r8), allocatable,target :: plant_nh4demand_vr_fates(:,:) ! nh4 demand per competitor per soil layer
    real(r8), allocatable,target :: plant_no3demand_vr_fates(:,:) ! no3 demand per competitor per soil layer
@@ -1330,19 +1333,52 @@ contains
                     ft = elm_fates%fates(ci)%bc_out(s)%ft_index(f)
 
                     ! [gN/m3/s] = [gC/m3] * [gN/gC/s]
+                    !col_plant_nh4demand_vr(c,j) = col_plant_nh4demand_vr(c,j) + &
+                    !     elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                    !     elm_fates%fates(ci)%bc_out(s)%vmax_nh4(f) 
+
+                    !col_plant_no3demand_vr(c,j) = col_plant_no3demand_vr(c,j) + &
+                    !     elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                    !     elm_fates%fates(ci)%bc_out(s)%vmax_no3(f)
+
+                    ! convert to per soil water based
+                    solution_nh4conc = max(0._r8,smin_nh4_vr(c,j)/max(0.05_r8,h2osoi_vol(c,j)))
+                    write(iulog,*) 'NH4, f =', f, 'ft =', ft 
+                    write(iulog,'(3(1X,ES13.5))') smin_nh4_vr(c,j), h2osoi_vol(c,j), solution_nh4conc 
+                    write(iulog,'(1(1X,ES13.5))') elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) 
+                    write(iulog,'(1(1X,ES13.5))') elm_fates%fates(ci)%bc_out(s)%vmax_nh4(f) 
+                    write(iulog,'(1(1X,ES13.5))') elm_fates%fates(ci)%bc_pconst%eca_km_nh4(ft)
                     col_plant_nh4demand_vr(c,j) = col_plant_nh4demand_vr(c,j) + &
                          elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
-                         elm_fates%fates(ci)%bc_out(s)%vmax_nh4(f)
+                         elm_fates%fates(ci)%bc_out(s)%vmax_nh4(f) * solution_nh4conc / &
+                         (elm_fates%fates(ci)%bc_pconst%eca_km_nh4(ft) + solution_nh4conc)
+                    write(iulog,'(1(1X,ES13.5))') col_plant_nh4demand_vr(c,j) 
 
+                    solution_no3conc = max(0._r8,smin_no3_vr(c,j)/max(0.05_r8,h2osoi_vol(c,j)))
+                    write(iulog,'(3(1X,ES13.5))') smin_no3_vr(c,j), h2osoi_vol(c,j), solution_no3conc 
+                    write(iulog,'(1(1X,ES13.5))') elm_fates%fates(ci)%bc_out(s)%vmax_no3(f) 
+                    write(iulog,'(1(1X,ES13.5))') elm_fates%fates(ci)%bc_pconst%eca_km_no3(ft)
+                    write(iulog,'(1(1X,ES13.5))') elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                         elm_fates%fates(ci)%bc_out(s)%vmax_no3(f) * solution_no3conc / &
+                         (elm_fates%fates(ci)%bc_pconst%eca_km_no3(f) + solution_no3conc)
                     col_plant_no3demand_vr(c,j) = col_plant_no3demand_vr(c,j) + &
                          elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
-                         elm_fates%fates(ci)%bc_out(s)%vmax_no3(f)
+                         elm_fates%fates(ci)%bc_out(s)%vmax_no3(f) * solution_no3conc / &
+                         (elm_fates%fates(ci)%bc_pconst%eca_km_no3(ft) + solution_no3conc)
+                    write(iulog,'(1(1X,ES13.5))') col_plant_no3demand_vr(c,j) 
 
                     col_plant_ndemand_vr(c,j) = col_plant_nh4demand_vr(c,j) + col_plant_no3demand_vr(c,j) 
 
+                    !col_plant_pdemand_vr(c,j) = col_plant_pdemand_vr(c,j) + &
+                    !     elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                    !     elm_fates%fates(ci)%bc_out(s)%vmax_po4(f)
+
+                    ! convert to per soil water based
+                    solution_pconc = max(0._r8,solutionp_vr(c,j)/max(0.05_r8,h2osoi_vol(c,j)))
                     col_plant_pdemand_vr(c,j) = col_plant_pdemand_vr(c,j) + &
                          elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
-                         elm_fates%fates(ci)%bc_out(s)%vmax_po4(f)
+                         elm_fates%fates(ci)%bc_out(s)%vmax_po4(f) * solution_pconc / &
+                         (elm_fates%fates(ci)%bc_pconst%eca_km_p(ft) + solution_pconc)
                  end do
 
                  ! [gN/m2/s]
@@ -1445,13 +1481,13 @@ contains
          end if ! nu_com
      end if
 
-        ! Starting resolving N limitation !!!
-        ! =============================================================
-        ! This section is modified, Aug 2015 by Q. Zhu
-        ! (1) add nitrogen and phosphorus competition
-        ! (2) nitrogen and phosphorus uptake is based on root kinetics
-        ! (3) no second pass nutrient uptake for plants
-        ! =============================================================
+     ! Starting resolving N limitation !!!
+     ! =============================================================
+     ! This section is modified, Aug 2015 by Q. Zhu
+     ! (1) add nitrogen and phosphorus competition
+     ! (2) nitrogen and phosphorus uptake is based on root kinetics
+     ! (3) no second pass nutrient uptake for plants
+     ! =============================================================
 
      if (nu_com .eq. 'RD') then
 
@@ -1508,52 +1544,52 @@ contains
         end do
         
         if(.false.)then
-        call NAllocationRD(begc, num_soilc, filter_soilc, &
-           col_plant_ndemand_vr(begc:endc,1:nlevdecomp), & ! IN
-           potential_immob_vr(begc:endc,1:nlevdecomp),   & ! IN
-           AllocParamsInst%compet_plant_nh4,        & ! IN
-           AllocParamsInst%compet_decomp_nh4,       & ! IN
-           dt,                               & ! IN
-           smin_nh4_vr(begc:endc,1:nlevdecomp),     & ! IN
-           fpi_nh4_vr(1:num_soilc,1:nlevdecomp),    & ! OUT
-           actual_immob_nh4_vr(begc:endc,1:nlevdecomp), & ! OUT
-           smin_nh4_to_plant_vr(begc:endc,1:nlevdecomp),& ! OUT
-           smin_no3_vr(begc:endc,1:nlevdecomp),     & ! IN
-           AllocParamsInst%compet_plant_no3,        & ! IN
-           AllocParamsInst%compet_decomp_no3,       & ! IN
-           AllocParamsInst%compet_nit,              & ! IN
-           AllocParamsInst%compet_denit,            & ! IN
-           pot_f_nit_vr(begc:endc,1:nlevdecomp),    & ! IN
-           pot_f_denit_vr(begc:endc,1:nlevdecomp),  & ! IN
-           fpi_no3_vr(1:num_soilc,1:nlevdecomp),    & ! OUT
-           actual_immob_no3_vr_local(1:num_soilc,1:nlevdecomp),& ! OUT
-           smin_no3_to_plant_vr_local(1:num_soilc,1:nlevdecomp),&! OUT
-           f_nit_vr(begc:endc,1:nlevdecomp),           & ! OUT
-           f_denit_vr_local(1:num_soilc,1:nlevdecomp))           ! OUT
-
-       do fc = 1,num_soilc
-          c = filter_soilc(fc)
-          do j = 1,nlevdecomp
-             if(abs(smin_no3_to_plant_vr_local(fc,j)-smin_no3_to_plant_vr(c,j))>1.e-12)then
-                write(iulog,*)"no3 method diff:",c,j,smin_no3_to_plant_vr_local(fc,j),smin_no3_to_plant_vr(c,j)
-                write(iulog,*)"smin:", smin_no3_vr(c,j)
-                write(iulog,*)"plant_demand:",col_plant_ndemand_vr(c,j),smin_nh4_to_plant_vr(c,j)
-                write(iulog,*)"compet plant no3:",AllocParamsInst%compet_plant_no3
-                call endrun(errMsg(__FILE__, __LINE__))
-             end if
-             if(abs(actual_immob_no3_vr_local(fc,j)-actual_immob_no3_vr(c,j))>1.e-12)then
-                write(iulog,*)"immob method diff:",c,j,actual_immob_no3_vr_local(fc,j),actual_immob_no3_vr(c,j)
-                call endrun(errMsg(__FILE__, __LINE__))
-             end if
-             if(abs(f_denit_vr_local(fc,j)-f_denit_vr(c,j))>1.e-12)then
-                write(iulog,*)"denit method diff:",c,j,f_denit_vr_local(fc,j),f_denit_vr(c,j)
-                call endrun(errMsg(__FILE__, __LINE__))
-             end if
-             
+           call NAllocationRD(begc, num_soilc, filter_soilc, &
+              col_plant_ndemand_vr(begc:endc,1:nlevdecomp), & ! IN
+              potential_immob_vr(begc:endc,1:nlevdecomp),   & ! IN
+              AllocParamsInst%compet_plant_nh4,        & ! IN
+              AllocParamsInst%compet_decomp_nh4,       & ! IN
+              dt,                               & ! IN
+              smin_nh4_vr(begc:endc,1:nlevdecomp),     & ! IN
+              fpi_nh4_vr(1:num_soilc,1:nlevdecomp),    & ! OUT
+              actual_immob_nh4_vr(begc:endc,1:nlevdecomp), & ! OUT
+              smin_nh4_to_plant_vr(begc:endc,1:nlevdecomp),& ! OUT
+              smin_no3_vr(begc:endc,1:nlevdecomp),     & ! IN
+              AllocParamsInst%compet_plant_no3,        & ! IN
+              AllocParamsInst%compet_decomp_no3,       & ! IN
+              AllocParamsInst%compet_nit,              & ! IN
+              AllocParamsInst%compet_denit,            & ! IN
+              pot_f_nit_vr(begc:endc,1:nlevdecomp),    & ! IN
+              pot_f_denit_vr(begc:endc,1:nlevdecomp),  & ! IN
+              fpi_no3_vr(1:num_soilc,1:nlevdecomp),    & ! OUT
+              actual_immob_no3_vr_local(1:num_soilc,1:nlevdecomp),& ! OUT
+              smin_no3_to_plant_vr_local(1:num_soilc,1:nlevdecomp),&! OUT
+              f_nit_vr(begc:endc,1:nlevdecomp),           & ! OUT
+              f_denit_vr_local(1:num_soilc,1:nlevdecomp))           ! OUT
+   
+          do fc = 1,num_soilc
+             c = filter_soilc(fc)
+             do j = 1,nlevdecomp
+                if(abs(smin_no3_to_plant_vr_local(fc,j)-smin_no3_to_plant_vr(c,j))>1.e-12)then
+                   write(iulog,*)"no3 method diff:",c,j,smin_no3_to_plant_vr_local(fc,j),smin_no3_to_plant_vr(c,j)
+                   write(iulog,*)"smin:", smin_no3_vr(c,j)
+                   write(iulog,*)"plant_demand:",col_plant_ndemand_vr(c,j),smin_nh4_to_plant_vr(c,j)
+                   write(iulog,*)"compet plant no3:",AllocParamsInst%compet_plant_no3
+                   call endrun(errMsg(__FILE__, __LINE__))
+                end if
+                if(abs(actual_immob_no3_vr_local(fc,j)-actual_immob_no3_vr(c,j))>1.e-12)then
+                   write(iulog,*)"immob method diff:",c,j,actual_immob_no3_vr_local(fc,j),actual_immob_no3_vr(c,j)
+                   call endrun(errMsg(__FILE__, __LINE__))
+                end if
+                if(abs(f_denit_vr_local(fc,j)-f_denit_vr(c,j))>1.e-12)then
+                   write(iulog,*)"denit method diff:",c,j,f_denit_vr_local(fc,j),f_denit_vr(c,j)
+                   call endrun(errMsg(__FILE__, __LINE__))
+                end if
+                
+             end do
           end do
-       end do
        end if
-    else
+     else  ! ECA
        do fc=1,num_soilc
 
            c = filter_soilc(fc)
@@ -1646,12 +1682,12 @@ contains
                                    f_denit_vr(c,:))                     ! OUT
 
             col_plant_ndemand_vr(c,:) = col_plant_nh4demand_vr(c,:)+col_plant_no3demand_vr(c,:)
-         end do 
+       end do 
 
-      end if
+     end if ! RD / ECA
 
      do j = 1, nlevdecomp
-        do fc=1, num_soilc
+       do fc=1, num_soilc
 
            c = filter_soilc(fc)
            l = col_pp%landunit(c)
@@ -1689,8 +1725,6 @@ contains
                  smin_nh4_to_plant_vr(c,j) = col_plant_ndemand_vr(c,j) - smin_no3_to_plant_vr(c,j)
               end if
 
-
-
            end if
 
            ! sum up nitrogen limitation to decomposition
@@ -1700,12 +1734,11 @@ contains
            sminn_to_plant_vr(c,j) = smin_no3_to_plant_vr(c,j) + smin_nh4_to_plant_vr(c,j)
            actual_immob_vr(c,j) = actual_immob_no3_vr(c,j) + actual_immob_nh4_vr(c,j)
 
-        end do 
+       end do 
      end do
 
-        ! Starting resolving P limitation !!!
-        ! =============================================================
-
+     ! Starting resolving P limitation !!!
+     ! =============================================================
      if (nu_com .eq. 'RD') then
 
         call PAllocationRD(begc, num_soilc,filter_soilc, &
@@ -1717,7 +1750,7 @@ contains
                 actual_immob_p_vr(begc:endc,1:nlevdecomp),                  & ! OUT
                 sminp_to_plant_vr(begc:endc,1:nlevdecomp),                  & ! OUT
                 supplement_to_sminp_vr(begc:endc,1:nlevdecomp))               ! OUT
-     else
+     else ! ECA
         do fc=1, num_soilc
 
            c = filter_soilc(fc)
@@ -1805,20 +1838,20 @@ contains
 
      end if ! end of P competition
 
-      !  resolving N limitation vs. P limitation for decomposition
-      !  update (1) actual immobilization for N and P (2) sminn_to_plant and sminp_to_plant
-      !  We only resolve co-limitations when are supplementing neither element
+     !  resolving N limitation vs. P limitation for decomposition
+     !  update (1) actual immobilization for N and P (2) sminn_to_plant and sminp_to_plant
+     !  We only resolve co-limitations when are supplementing neither element
 
-      np_bothactive: if ( .not.carbon_only .and.  &
-           .not.carbonphosphorus_only .and. &
-           .not.carbonnitrogen_only ) then
+     np_bothactive: if ( .not.carbon_only .and.  &
+        .not.carbonphosphorus_only .and. &
+        .not.carbonnitrogen_only ) then
 
-         !$acc enter data create(sum,sum2,sum_immob_no3,sum_immob_nh4,sum_immob_p,sum_pot_immob_p)
-           if (nu_com .eq. 'RD') then
+        !$acc enter data create(sum,sum2,sum_immob_no3,sum_immob_nh4,sum_immob_p,sum_pot_immob_p)
+        if (nu_com .eq. 'RD') then
 
-             !$acc parallel loop independent collapse(2) gang worker private(c,sum,sum2) default(present)
-              do j = 1, nlevdecomp
-                 do fc=1, num_soilc
+           !$acc parallel loop independent collapse(2) gang worker private(c,sum,sum2) default(present)
+           do j = 1, nlevdecomp
+              do fc=1, num_soilc
 
                  c = filter_soilc(fc)
                  l = col_pp%landunit(c)
@@ -1955,7 +1988,7 @@ contains
      ! sum up plant N/P uptake at column level and patch level
      ! sum up N fluxes to plant after initial competition
      !$acc parallel loop independent gang worker private(c,sum1,sum2) default(present)
-      do fc = 1, num_soilc
+     do fc = 1, num_soilc
         c = filter_soilc(fc)
         sum1 = 0._r8
         sum2 = 0._r8
@@ -2123,49 +2156,85 @@ contains
 
      if(use_fates)then
         do fc=1,num_soilc
-           c = filter_soilc(fc)
-           ci      = bounds%clump_index
-           s = elm_fates%f2hmap(ci)%hsites(c)
+           c  = filter_soilc(fc)
+           ci = bounds%clump_index
+           s  = elm_fates%f2hmap(ci)%hsites(c)
            n_pcomp = elm_fates%fates(ci)%bc_out(s)%num_plant_comps
 
+           ! recalculate total demand per soil layer
+           ! APW: why not just use demand calculation from above?
            sum_nh4demand(1:nlevdecomp) = 0._r8
            sum_no3demand(1:nlevdecomp) = 0._r8
            sum_pdemand(1:nlevdecomp) = 0._r8
            do j = 1,nlevdecomp
               do f = 1,n_pcomp
+                 !sum_nh4demand(j) = sum_nh4demand(j) + &
+                 !     elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                 !     elm_fates%fates(ci)%bc_out(s)%vmax_nh4(f)
+                 !sum_no3demand(j) = sum_no3demand(j) + &
+                 !     elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                 !     elm_fates%fates(ci)%bc_out(s)%vmax_no3(f)
+                 !sum_pdemand(j) = sum_pdemand(j) + &
+                 !     elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                 !     elm_fates%fates(ci)%bc_out(s)%vmax_po4(f)
+                 ft = elm_fates%fates(ci)%bc_out(s)%ft_index(f)
+                 solution_nh4conc = max(0._r8,smin_nh4_vr(c,j)/max(0.05_r8,h2osoi_vol(c,j)))
                  sum_nh4demand(j) = sum_nh4demand(j) + &
                       elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
-                      elm_fates%fates(ci)%bc_out(s)%vmax_nh4(f)
+                      elm_fates%fates(ci)%bc_out(s)%vmax_nh4(f) * solution_nh4conc / &
+                      (elm_fates%fates(ci)%bc_pconst%eca_km_nh4(ft) + solution_nh4conc)
+                 solution_no3conc = max(0._r8,smin_no3_vr(c,j)/max(0.05_r8,h2osoi_vol(c,j)))
                  sum_no3demand(j) = sum_no3demand(j) + &
                       elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
-                      elm_fates%fates(ci)%bc_out(s)%vmax_no3(f)
+                      elm_fates%fates(ci)%bc_out(s)%vmax_no3(f) * solution_no3conc / &
+                      (elm_fates%fates(ci)%bc_pconst%eca_km_no3(ft) + solution_no3conc)
+                 solution_pconc = max(0._r8,solutionp_vr(c,j)/max(0.05_r8,h2osoi_vol(c,j)))
                  sum_pdemand(j) = sum_pdemand(j) + &
                       elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
-                      elm_fates%fates(ci)%bc_out(s)%vmax_po4(f)
+                      elm_fates%fates(ci)%bc_out(s)%vmax_po4(f) * solution_pconc / &
+                      (elm_fates%fates(ci)%bc_pconst%eca_km_p(ft) + solution_pconc)
               end do
            end do
 
+           ! calculate each PFT's fraction of demand in a given soil layer
            sum_nh4uptake = 0._r8
            sum_no3uptake = 0._r8
            sum_po4uptake = 0._r8
-           
+           write(iulog,'(2(1X,ES13.5))') plant_ndemand_col(c), tiny(plant_ndemand_col(c)) 
            if( plant_ndemand_col(c)>tiny(plant_ndemand_col(c)) ) then
-              do f = 1,n_pcomp
+              do f = 1,n_pcomp      
+                 ft = elm_fates%fates(ci)%bc_out(s)%ft_index(f)
                  do j = 1,nlevdecomp
+                    !write(iulog,'((1X,ES13.5))') sum_nh4demand(j)
                     if(sum_nh4demand(j)>1.e-20_r8)then
-                       demand_frac = elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
-                            elm_fates%fates(ci)%bc_out(s)%vmax_nh4(f)/sum_nh4demand(j)
-                       
+                       !demand_frac = elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                       !     elm_fates%fates(ci)%bc_out(s)%vmax_nh4(f)/sum_nh4demand(j)
+                       solution_nh4conc = max(0._r8,smin_nh4_vr(c,j)/max(0.05_r8,h2osoi_vol(c,j)))
+                       demand_frac = (elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                         elm_fates%fates(ci)%bc_out(s)%vmax_nh4(f) * solution_nh4conc / &
+                         (elm_fates%fates(ci)%bc_pconst%eca_km_nh4(ft) + solution_nh4conc)) / &
+                         !sum_nh4demand(j)
+                         col_plant_nh4demand_vr(c,j)
+          
                        elm_fates%fates(ci)%bc_in(s)%plant_nh4_uptake_flux(f,1) = &
                             elm_fates%fates(ci)%bc_in(s)%plant_nh4_uptake_flux(f,1) + &
                             demand_frac * smin_nh4_to_plant_vr(c,j)*dt*dzsoi_decomp(j)
                        
                        sum_nh4uptake = sum_nh4uptake + &
                             demand_frac * smin_nh4_to_plant_vr(c,j)*dt*dzsoi_decomp(j)
+                       !write(iulog,'(I2.2,1X,I2.2,7(1X,ES13.5))') f, j, h2osoi_vol(c,j), solution_nh4conc, & 
+                       !   col_plant_nh4demand_vr(c,j), sum_nh4demand(j), demand_frac, & 
+                       !   smin_nh4_to_plant_vr(c,j), dt*dzsoi_decomp(j)
                     end if
                     if(sum_no3demand(j)>1.e-20_r8)then
-                       demand_frac = elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
-                            elm_fates%fates(ci)%bc_out(s)%vmax_no3(f)/sum_no3demand(j)
+                       !demand_frac = elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                       !     elm_fates%fates(ci)%bc_out(s)%vmax_no3(f)/sum_no3demand(j)
+                       solution_no3conc = max(0._r8,smin_no3_vr(c,j)/max(0.05_r8,h2osoi_vol(c,j)))
+                       demand_frac = (elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                         elm_fates%fates(ci)%bc_out(s)%vmax_no3(f) * solution_no3conc / &
+                         (elm_fates%fates(ci)%bc_pconst%eca_km_no3(ft) + solution_no3conc)) / &
+                         !sum_no3demand(j)
+                         col_plant_no3demand_vr(c,j)
                        
                        elm_fates%fates(ci)%bc_in(s)%plant_no3_uptake_flux(f,1) = &
                             elm_fates%fates(ci)%bc_in(s)%plant_no3_uptake_flux(f,1) + &
@@ -2179,10 +2248,17 @@ contains
            end if
            if( plant_pdemand_col(c)>tiny(plant_pdemand_col(c)) ) then
               do f = 1,n_pcomp
+                 ft = elm_fates%fates(ci)%bc_out(s)%ft_index(f)
                  do j = 1,nlevdecomp
                     if(sum_pdemand(j)>1.e-20_r8)then
-                       demand_frac = elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
-                            elm_fates%fates(ci)%bc_out(s)%vmax_po4(f)/sum_pdemand(j)
+                       !demand_frac = elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                       !     elm_fates%fates(ci)%bc_out(s)%vmax_po4(f)/sum_pdemand(j)
+                       solution_pconc = max(0._r8,solutionp_vr(c,j)/max(0.05_r8,h2osoi_vol(c,j)))
+                       demand_frac = (elm_fates%fates(ci)%bc_out(s)%veg_rootc(f,j) * &
+                         elm_fates%fates(ci)%bc_out(s)%vmax_po4(f) * solution_pconc / &
+                         (elm_fates%fates(ci)%bc_pconst%eca_km_p(ft) + solution_pconc)) / &
+                         !sum_pdemand(j)
+                         col_plant_pdemand_vr(c,j)
                        
                        elm_fates%fates(ci)%bc_in(s)%plant_p_uptake_flux(f,1) = &
                             elm_fates%fates(ci)%bc_in(s)%plant_p_uptake_flux(f,1) + &
